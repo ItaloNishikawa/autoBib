@@ -1,0 +1,38 @@
+# ─── Ambiente virtual ──────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Variáveis de ambiente (NUNCA subir a chave real) ──────────────────────────
+.env
+
+# ─── Saídas geradas pelo pipeline ──────────────────────────────────────────────
+output/
+
+# ─── Cache do Python ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ─── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── IDEs e editores ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Sistema operacional ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Distribuição / build ──────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/

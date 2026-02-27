@@ -1,0 +1,23 @@
+# Dependências do AutoBib
+# Instale com: pip install -r requirements.txt
+#
+# Para regenerar com as versões do seu ambiente ativo:
+#   pip freeze > requirements.txt
+
+# Manipulação de dados
+pandas==3.0.1
+numpy==2.4.2
+openpyxl==3.1.5         # engine do ExcelWriter para .xlsx
+
+# Parsing de arquivos BibTeX
+bibtexparser==1.4.4
+
+# Requisições HTTP (Semantic Scholar API)
+requests==2.32.5
+
+# Inteligência Artificial (Google Gemini)
+google-genai==1.65.0
+python-dotenv==1.2.1
+
+# Geração de PDF
+fpdf2==2.8.6
