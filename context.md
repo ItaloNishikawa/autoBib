@@ -52,7 +52,7 @@ Detalhamento da responsabilidade única de cada arquivo `.py`, seguindo o fluxo 
 
 | Função | Descrição |
 |---|---|
-| `generate_query_and_justification_and_justification(theme)` | Recebe o tema, monta um prompt rigoroso e retorna um JSON com a String de Busca (usando `AND`, `OR`, `NOT`) e a justificativa técnica. |
+| `generate_query_and_justification(theme)` | Recebe o tema, monta um prompt rigoroso e retorna um JSON com a String de Busca (usando `AND`, `OR`, `NOT`) e a justificativa técnica. |
 | `analyze_abstracts(df)` | Percorre o DataFrame, lê a coluna `abstract` de cada artigo, envia para a IA e retorna a análise crítica estruturada (Contribuição, Metodologia, Limitações). |
 
 ---

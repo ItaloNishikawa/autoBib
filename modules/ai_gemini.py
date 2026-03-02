@@ -239,7 +239,3 @@ def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
 
     logger.info("Leitura crítica finalizada.")
     return df
-
-
-# Aliases para compatibilidade com chamadas existentes
-generate_query = generate_query_and_justification
