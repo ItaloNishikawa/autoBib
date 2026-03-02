@@ -13,11 +13,6 @@ import numpy as np
 import pandas as pd
 import requests
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 # Delay (segundos) entre chamadas à API para evitar rate-limit

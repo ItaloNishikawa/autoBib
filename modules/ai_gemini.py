@@ -15,14 +15,17 @@ import pandas as pd
 from dotenv import load_dotenv
 from google import genai
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
+# Módulos não devem chamar basicConfig — a configuração é responsabilidade
+# do ponto de entrada (main.py). Aqui apenas obtemos o logger do módulo.
 logger = logging.getLogger(__name__)
 
-_MODEL = "gemini-flash-latest"
+# Cadeia de modelos tentadas em ordem. Quando um modelo retorna 429 (cota
+# esgotada) o sistema avança automaticamente para o próximo.
+# Referência: https://ai.google.dev/gemini-api/docs/models
+_MODELS: list[str] = [
+    "gemini-2.5-flash",       # melhor custo-benefício atual (estável)
+    "gemini-2.5-flash-lite",  # mais leve da família 2.5 (estável)
+]
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +42,42 @@ def _get_client() -> genai.Client:
             "GEMINI_API_KEY não encontrada. Defina a variável no arquivo .env."
         )
     return genai.Client(api_key=api_key)
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """Retorna True se a exceção indicar limite de cota (HTTP 429)."""
+    msg = str(exc).lower()
+    return "429" in msg or "resource_exhausted" in msg or "quota" in msg
+
+
+def _generate_with_fallback(client: genai.Client, prompt: str) -> str:
+    """Tenta gerar conteúdo iterando pela cadeia de modelos em ``_MODELS``.
+
+    Se um modelo retornar erro de cota (429 / RESOURCE_EXHAUSTED), o próximo
+    da lista é utilizado automaticamente. Lança exceção apenas quando todos
+    os modelos falharem.
+
+    Returns:
+        Texto bruto retornado pelo modelo que teve sucesso.
+    """
+    last_exc: Exception = RuntimeError("Nenhum modelo disponível em _MODELS.")
+    for model in _MODELS:
+        try:
+            logger.debug("Tentando modelo '%s'...", model)
+            response = client.models.generate_content(model=model, contents=prompt)
+            logger.debug("Modelo '%s' respondeu com sucesso.", model)
+            return response.text
+        except Exception as exc:  # noqa: BLE001
+            if _is_quota_error(exc):
+                logger.warning(
+                    "Modelo '%s' atingiu o limite de cota (429). Tentando próximo...",
+                    model,
+                )
+                last_exc = exc
+                time.sleep(1)  # pequena pausa antes de tentar o próximo
+                continue
+            raise  # erros que não são de cota são relançados imediatamente
+    raise last_exc
 
 
 def _parse_json_response(text: str) -> dict:
@@ -163,8 +202,8 @@ def generate_query_and_justification(theme: str, database: str) -> tuple[str, st
 
     try:
         client = _get_client()
-        response = client.models.generate_content(model=_MODEL, contents=prompt)
-        ai_data  = _parse_json_response(response.text)
+        text    = _generate_with_fallback(client, prompt)
+        ai_data = _parse_json_response(text)
         logger.info("Query gerada com sucesso.")
         return ai_data["query"], ai_data["justification"]
 
@@ -227,8 +266,8 @@ def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
         """
 
         try:
-            response = client.models.generate_content(model=_MODEL, contents=prompt)
-            ai_data  = _parse_json_response(response.text)
+            text    = _generate_with_fallback(client, prompt)
+            ai_data = _parse_json_response(text)
             df.at[idx, "observations"] = ai_data.get("observations", "Erro na formatação da resposta.")
         except Exception as exc:
             logger.warning("Erro ao analisar abstract (índice %d): %s", idx, exc)

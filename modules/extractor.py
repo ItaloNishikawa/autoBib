@@ -13,11 +13,6 @@ from pathlib import Path
 import bibtexparser
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 # Ordem padrão das colunas do DataFrame de saída

@@ -19,5 +19,8 @@ requests==2.32.5
 google-genai==1.65.0
 python-dotenv==1.2.1
 
+# Inteligência Artificial (Groq)
+groq
+
 # Geração de PDF
 fpdf2==2.8.6

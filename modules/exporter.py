@@ -13,11 +13,6 @@ from pathlib import Path
 import pandas as pd
 from fpdf import FPDF
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -132,7 +127,7 @@ def generate_comparative_analysis(df: pd.DataFrame) -> str:
     # --- Ano de publicações ---
     anos = pd.to_numeric(df["year"], errors="coerce").dropna()
     ano_mais_frequente = int(anos.mode()[0]) if not anos.empty else "N/A"
-    intervalo_anos = f"{int(anos.min())}–{int(anos.max())}" if not anos.empty else "N/A"
+    intervalo_anos = f"{int(anos.min())} – {int(anos.max())}" if not anos.empty else "N/A"
 
     analise = (
         f"1. Distribuicao por base de dados:\n{base_linhas}\n"
