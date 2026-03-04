@@ -3,25 +3,27 @@ Interface gráfica do AutoBib — construída com Streamlit.
 
 Execução:
     streamlit run app.py
+
+Fluxo em dois passos:
+  Passo 1 — Geração de Queries: usuário informa o tema e a IA gera uma
+             query otimizada para cada base (Scopus, IEEE, ACM).
+  Passo 2 — Análise: usuário faz upload dos .bib obtidos e o pipeline
+             extrai, transforma, enriquece e exporta os resultados.
 """
 
 import logging
-import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import streamlit as st
 
-# Garante que o diretório raiz do projeto esteja no PATH de importação,
-# independente do diretório de trabalho ao iniciar o Streamlit.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from modules.pipeline import PipelineConfig, run
+from modules.pipeline import PipelineConfig, QueriesResult, generate_queries, run_analysis
 from modules.rules import PipelineRules
 
-# ---------------------------------------------------------------------------
-# Configuração de logging (redireciona para o terminal onde Streamlit roda)
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -29,7 +31,7 @@ logging.basicConfig(
 )
 
 # ---------------------------------------------------------------------------
-# Layout da página
+# Configuração da página
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="AutoBib — Pipeline ETL Acadêmico",
@@ -39,173 +41,257 @@ st.set_page_config(
 
 st.title("📚 AutoBib")
 st.caption("Pipeline ETL Acadêmico — Extração, Transformação e Análise de artigos científicos")
-st.divider()
 
 # ---------------------------------------------------------------------------
-# Painel de configuração
+# Inicialização do estado da sessão
 # ---------------------------------------------------------------------------
-st.subheader("⚙️ Configuração do Pipeline")
+if "step" not in st.session_state:
+    st.session_state.step = "config"      # "config" | "queries" | "results"
 
-with st.form("pipeline_form"):
-    theme = st.text_input(
-        "🎯 Tema da pesquisa",
-        value="Post-Quantum Cryptography",
-        help="Descreva o tema em inglês para gerar a melhor query de busca.",
-    )
+if "queries_result" not in st.session_state:
+    st.session_state.queries_result = None
 
-    col1, col2 = st.columns(2)
-    database = col1.selectbox(
-        "🗄️ Base de dados",
-        options=sorted(PipelineRules.VALID_DATABASES),
-        index=sorted(PipelineRules.VALID_DATABASES).index("Scopus"),
-        help="Base da qual os arquivos .bib foram exportados.",
-    )
-    ai_provider = col2.selectbox(
-        "🤖 Provedor de IA",
-        options=sorted(PipelineRules.VALID_AI_PROVIDERS),
-        index=sorted(PipelineRules.VALID_AI_PROVIDERS).index("groq"),
-        help="Provedor usado para gerar a query e analisar os abstracts.",
-    )
+if "config" not in st.session_state:
+    st.session_state.config = None
 
-    st.caption(
-        "📁 Os arquivos `.bib` devem estar na pasta `data/` do projeto antes de executar."
-    )
+if "pipeline_result" not in st.session_state:
+    st.session_state.pipeline_result = None
 
-    submitted = st.form_submit_button("▶️ Executar Pipeline", use_container_width=True)
 
 # ---------------------------------------------------------------------------
-# Execução do pipeline
+# Indicador visual de etapas
 # ---------------------------------------------------------------------------
-if submitted:
-    st.divider()
-    st.subheader("📊 Progresso")
-
-    # Widgets de progresso (criados antes da execução para atualização incremental)
-    status_placeholder  = st.empty()
-    progress_placeholder = st.empty()
-    warning_placeholder  = st.empty()
-
-    progress_placeholder.progress(0)
-    status_placeholder.info("🚀 Iniciando pipeline...")
-
-    config = PipelineConfig(
-        theme=theme.strip(),
-        database=database,
-        ai_provider=ai_provider,
-    )
-
-    # ── Validação antecipada (sem chamar API) ─────────────────────────────
-    try:
-        PipelineRules.validate_config(config)
-    except ValueError as e:
-        status_placeholder.empty()
-        progress_placeholder.empty()
-        st.error(f"❌ Configuração inválida: {e}")
-        st.stop()
-
-    # ── Callback de progresso para o pipeline ─────────────────────────────
-    def update_ui(msg: str, pct: int) -> None:
-        """Atualiza os widgets de progresso na UI do Streamlit."""
-        if pct == -1:
-            # Aviso não bloqueante (cobertura de abstracts)
-            warning_placeholder.warning(msg)
+def _render_steps(active: str) -> None:
+    steps = {"config": "1️⃣ Gerar Queries", "queries": "2️⃣ Enviar Arquivos", "results": "3️⃣ Resultados"}
+    cols = st.columns(len(steps))
+    for col, (key, label) in zip(cols, steps.items()):
+        if key == active:
+            col.markdown(f"**:blue[{label}]**")
+        elif list(steps.keys()).index(key) < list(steps.keys()).index(active):
+            col.markdown(f"~~{label}~~ ✅")
         else:
-            status_placeholder.info(msg)
-            progress_placeholder.progress(pct)
-
-    # ── Execução ──────────────────────────────────────────────────────────
-    try:
-        result = run(config, on_step=update_ui)
-
-    except (ValueError, FileNotFoundError) as e:
-        status_placeholder.empty()
-        progress_placeholder.empty()
-        st.error(f"❌ Regra de negócio violada: {e}")
-        st.stop()
-
-    except EnvironmentError as e:
-        status_placeholder.empty()
-        progress_placeholder.empty()
-        st.error(f"🔑 Erro de configuração de ambiente: {e}")
-        st.info(
-            "Crie um arquivo `.env` na raiz do projeto com as chaves de API:\n\n"
-            "```\nGEMINI_API_KEY=...\nGROQ_API_KEY=...\n```"
-        )
-        st.stop()
-
-    except RuntimeError as e:
-        status_placeholder.empty()
-        progress_placeholder.empty()
-        st.error(f"💥 Falha no pipeline: {e}")
-        st.stop()
-
-    except Exception as e:
-        status_placeholder.empty()
-        progress_placeholder.empty()
-        st.error(f"💥 Erro inesperado: {type(e).__name__}: {e}")
-        st.stop()
-
-    # ── Resultados ────────────────────────────────────────────────────────
+            col.markdown(f":gray[{label}]")
     st.divider()
-    st.subheader("✅ Resultados")
-    st.success(f"Pipeline concluído! **{len(result.final_df)}** artigos processados.")
 
-    # Métricas rápidas
+
+# ===========================================================================
+# PASSO 1 — Configuração e geração de queries
+# ===========================================================================
+if st.session_state.step == "config":
+    _render_steps("config")
+    st.subheader("⚙️ Configuração")
+
+    with st.form("config_form"):
+        theme = st.text_input(
+            "🎯 Tema da pesquisa",
+            value="Post-Quantum Cryptography",
+            help="Descreva o tema em inglês para gerar a melhor query de busca.",
+        )
+        ai_provider = st.selectbox(
+            "🤖 Provedor de IA",
+            options=sorted(PipelineRules.VALID_AI_PROVIDERS),
+            index=sorted(PipelineRules.VALID_AI_PROVIDERS).index("groq"),
+            help="Provedor usado para gerar as queries e analisar os abstracts.",
+        )
+        st.caption(
+            f"A IA gerará automaticamente uma query otimizada para cada base: "
+            f"{', '.join(sorted(PipelineRules.VALID_DATABASES))}."
+        )
+        submitted = st.form_submit_button("🔍 Gerar Queries", width="stretch")
+
+    if submitted:
+        try:
+            config = PipelineConfig(theme=theme.strip(), ai_provider=ai_provider)
+            PipelineRules.validate_config(config)
+        except ValueError as e:
+            st.error(f"❌ {e}")
+            st.stop()
+
+        st.divider()
+        status = st.empty()
+        bar    = st.progress(0)
+
+        def _on_step(msg: str, pct: int) -> None:
+            if pct >= 0:
+                status.info(msg)
+                bar.progress(pct)
+
+        try:
+            queries = generate_queries(config, on_step=_on_step)
+        except EnvironmentError as e:
+            st.error(f"🔑 Chave de API ausente: {e}")
+            st.info("Crie um arquivo `.env` com `GEMINI_API_KEY` ou `GROQ_API_KEY`.")
+            st.stop()
+        except RuntimeError as e:
+            st.error(f"💥 {e}")
+            st.stop()
+        except Exception as e:
+            st.error(f"💥 Erro inesperado: {type(e).__name__}: {e}")
+            st.stop()
+
+        st.session_state.config          = config
+        st.session_state.queries_result   = queries
+        st.session_state.query_provider   = config.ai_provider
+        st.session_state.step             = "queries"
+        st.rerun()
+
+
+# ===========================================================================
+# PASSO 2 — Exibição das queries e upload dos .bib
+# ===========================================================================
+elif st.session_state.step == "queries":
+    _render_steps("queries")
+    queries: QueriesResult = st.session_state.queries_result
+    config: PipelineConfig = st.session_state.config
+
+    st.subheader("🔍 Queries geradas pela IA")
+    st.info(
+        f"Use as queries abaixo para pesquisar em cada base de dados. "
+        f"Após exportar os resultados como `.bib`, faça o upload abaixo."
+    )
+
+    for db, (query, justification) in sorted(queries.queries.items()):
+        with st.expander(f"📋 {db}", expanded=True):
+            st.code(query, language="text")
+            if justification:
+                st.caption(f"**Justificativa:** {justification}")
+
+    st.divider()
+    st.subheader("📂 Upload dos arquivos .bib")
+
+    with st.form("upload_form"):
+        uploaded_files = st.file_uploader(
+            "Envie os arquivos `.bib` exportados das bases de dados",
+            type=["bib"],
+            accept_multiple_files=True,
+            help=f"Máximo de {PipelineRules.MAX_FILES} arquivos.",
+        )
+        ai_provider_analysis = st.selectbox(
+            "🤖 Provedor de IA para análise",
+            options=sorted(PipelineRules.VALID_AI_PROVIDERS),
+            index=sorted(PipelineRules.VALID_AI_PROVIDERS).index(config.ai_provider),
+            help="Pode ser diferente do provedor usado para gerar as queries.",
+        )
+        st.markdown("**📄 Queries a incluir no PDF**")
+        selected_dbs = {
+            db: st.checkbox(db, value=True, key=f"chk_{db}")
+            for db in sorted(queries.queries.keys())
+        }
+        col1, col2 = st.columns(2)
+        analyze = col1.form_submit_button("▶️ Analisar Artigos", width="stretch")
+        restart = col2.form_submit_button("↩️ Recomeçar",        width="stretch")
+
+    if restart:
+        for key in ("step", "queries_result", "config", "pipeline_result"):
+            st.session_state.pop(key, None)
+        st.rerun()
+
+    if analyze:
+        try:
+            PipelineRules.validate_uploads(uploaded_files)
+        except ValueError as e:
+            st.error(f"❌ {e}")
+            st.stop()
+
+        chosen = [db for db, checked in selected_dbs.items() if checked]
+        if not chosen:
+            st.error("❌ Selecione ao menos uma base para incluir no PDF.")
+            st.stop()
+
+        # Filtra somente as queries selecionadas para o PDF
+        from modules.pipeline import QueriesResult as _QR
+        filtered_queries = _QR(queries={db: queries.queries[db] for db in chosen})
+
+        # Salva os arquivos em pasta temporária e atualiza o provedor de IA
+        temp_dir = tempfile.mkdtemp(prefix="autobib_")
+        try:
+            for uf in uploaded_files:
+                (Path(temp_dir) / uf.name).write_bytes(uf.getvalue())
+            config.data_dir   = temp_dir
+            config.ai_provider = ai_provider_analysis
+        except Exception as e:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            st.error(f"💥 Erro ao salvar arquivos: {e}")
+            st.stop()
+
+        st.divider()
+        st.subheader("📊 Progresso da análise")
+        status      = st.empty()
+        bar         = st.progress(0)
+        warning_box = st.empty()
+
+        def _on_analysis_step(msg: str, pct: int) -> None:
+            if pct == -1:
+                warning_box.warning(msg)
+            else:
+                status.info(msg)
+                bar.progress(pct)
+
+        try:
+            result = run_analysis(config, filtered_queries, on_step=_on_analysis_step)
+        except (ValueError, FileNotFoundError) as e:
+            st.error(f"❌ Regra de negócio violada: {e}")
+            st.stop()
+        except EnvironmentError as e:
+            st.error(f"🔑 Chave de API ausente: {e}")
+            st.stop()
+        except RuntimeError as e:
+            st.error(f"💥 Falha na análise: {e}")
+            st.stop()
+        except Exception as e:
+            st.error(f"💥 Erro inesperado: {type(e).__name__}: {e}")
+            st.stop()
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        st.session_state.pipeline_result = result
+        st.session_state.step = "results"
+        st.rerun()
+
+
+# ===========================================================================
+# PASSO 3 — Resultados
+# ===========================================================================
+elif st.session_state.step == "results":
+    _render_steps("results")
+    result = st.session_state.pipeline_result
+    config: PipelineConfig = st.session_state.config
+
+    st.subheader("✅ Análise concluída!")
+    st.success(f"**{len(result.final_df)}** artigos processados.")
+
     col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("📄 Artigos", len(result.final_df))
-    col_m2.metric("🗄️ Base", config.database)
-    col_m3.metric("🤖 IA usada", config.ai_provider.capitalize())
-
-    # Query gerada pela IA
-    with st.expander("🔍 Query gerada pela IA"):
-        st.code(result.query, language="text")
-        if result.justification:
-            st.caption(result.justification)
+    col_m1.metric("📄 Artigos",      len(result.final_df))
+    col_m2.metric("🔍 IA (queries)", st.session_state.get("query_provider", config.ai_provider).capitalize())
+    col_m3.metric("🧠 IA (análise)", config.ai_provider.capitalize())
 
     # Preview do DataFrame
     st.subheader("📋 Prévia dos artigos")
-    preview_cols = ["title", "authors", "year", "journal", "citations", "observations"]
-    available_cols = [c for c in preview_cols if c in result.final_df.columns]
+    preview_cols    = ["title", "authors", "year", "journal", "citations", "observations"]
+    available_cols  = [c for c in preview_cols if c in result.final_df.columns]
     st.dataframe(
         result.final_df[available_cols] if available_cols else result.final_df,
-        use_container_width=True,
+        width="stretch",
         height=350,
     )
 
-    # Botões de download
+    # Downloads
     st.subheader("📦 Downloads")
     dcol1, dcol2, dcol3 = st.columns(3)
 
-    zip_path   = Path(result.zip_path)
-    excel_path = Path(result.excel_path)
-    pdf_path   = Path(result.pdf_path)
+    for col, path, label, fname, mime in [
+        (dcol1, result.zip_path,   "📦 Entrega_Final.zip", "Entrega_Final.zip", "application/zip"),
+        (dcol2, result.excel_path, "📊 Planilha Excel",    "planilha.xlsx",     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        (dcol3, result.pdf_path,   "📄 Relatório PDF",     "relatorio.pdf",     "application/pdf"),
+    ]:
+        p = Path(path)
+        if p.exists():
+            with open(p, "rb") as f:
+                col.download_button(label, f, fname, mime, width="stretch")
 
-    if zip_path.exists():
-        with open(zip_path, "rb") as f:
-            dcol1.download_button(
-                label="📦 Entrega_Final.zip",
-                data=f,
-                file_name="Entrega_Final.zip",
-                mime="application/zip",
-                use_container_width=True,
-            )
+    st.divider()
+    if st.button("↩️ Nova pesquisa", width="stretch"):
+        for key in ("step", "queries_result", "config", "pipeline_result"):
+            st.session_state.pop(key, None)
+        st.rerun()
 
-    if excel_path.exists():
-        with open(excel_path, "rb") as f:
-            dcol2.download_button(
-                label="📊 Planilha Excel",
-                data=f,
-                file_name="planilha.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-    if pdf_path.exists():
-        with open(pdf_path, "rb") as f:
-            dcol3.download_button(
-                label="📄 Relatório PDF",
-                data=f,
-                file_name="relatorio.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )

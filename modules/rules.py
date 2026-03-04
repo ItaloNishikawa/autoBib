@@ -26,7 +26,26 @@ class PipelineRules:
     MAX_ABSTRACT_MISS   = 0.60  # acima deste percentual sem abstract, avisa o usuário
     VALID_DATABASES     = {"Scopus", "IEEE", "ACM"}
     VALID_AI_PROVIDERS  = {"gemini", "groq"}
+    # ── Validação de arquivos enviados ──────────────────────────────────────
 
+    @staticmethod
+    def validate_uploads(files: list) -> None:
+        """Valida os arquivos .bib enviados pelo usuário na interface.
+
+        Raises:
+            ValueError: Nenhum arquivo enviado ou limite excedido.
+        """
+        if not files:
+            raise ValueError(
+                "Nenhum arquivo .bib enviado. "
+                "Adicione ao menos 1 arquivo antes de executar o pipeline."
+            )
+        if len(files) > PipelineRules.MAX_FILES:
+            raise ValueError(
+                f"{len(files)} arquivo(s) enviados, mas o limite é {PipelineRules.MAX_FILES}. "
+                "Reduza a quantidade de arquivos e tente novamente."
+            )
+        logger.info("Upload validado: %d arquivo(s) .bib.", len(files))
     # ── Validação de configuração ─────────────────────────────────────────
 
     @staticmethod
@@ -44,11 +63,6 @@ class PipelineRules:
         if len(config.theme.strip()) < 3:
             raise ValueError(
                 "O tema da pesquisa deve ter ao menos 3 caracteres."
-            )
-        if config.database not in PipelineRules.VALID_DATABASES:
-            raise ValueError(
-                f"Base de dados inválida: '{config.database}'. "
-                f"Opções válidas: {', '.join(sorted(PipelineRules.VALID_DATABASES))}."
             )
         if config.ai_provider not in PipelineRules.VALID_AI_PROVIDERS:
             raise ValueError(
@@ -69,7 +83,7 @@ class PipelineRules:
         if df is None or df.empty:
             raise FileNotFoundError(
                 "Nenhum artigo extraído. "
-                "Verifique se há arquivos .bib válidos na pasta data/."
+                "Verifique se os arquivos .bib enviados são válidos e contêm entradas."
             )
         if len(df) < PipelineRules.MIN_ARTICLES:
             raise ValueError(

@@ -116,12 +116,16 @@ def _build_prompt(theme: str, database: str) -> str:
             DIRETRIZES DE SAÍDA (FORMATO):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
             NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
-            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\"), especialmente as aspas que fazem parte da sintaxe de busca do IEEE.
+            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
+            
+            REGRA CRÍTICA PARA A JUSTIFICATIVA: 
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
+            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
 
             Estrutura EXATA exigida:
             {{
             "query": "string de busca final formatada em uma única linha",
-            "justification": "Breve explicação (em tópicos) das palavras principais, e como a limitação de wildcards e aninhamento do IEEE foi tratada."
+            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
 
@@ -142,11 +146,15 @@ def _build_prompt(theme: str, database: str) -> str:
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
             NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
             As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
+            
+            REGRA CRÍTICA PARA A JUSTIFICATIVA: 
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
+            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
 
             Estrutura EXATA exigida:
             {{
             "query": "string de busca final formatada em uma única linha",
-            "justification": "Breve explicação (em tópicos) das palavras principais, sinônimos, controle de contexto e exclusões aplicadas."
+            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
 
@@ -166,12 +174,16 @@ def _build_prompt(theme: str, database: str) -> str:
             DIRETRIZES DE SAÍDA (FORMATO):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
             NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
-            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\"), para não quebrar o parser da aplicação.
+            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
+            
+            REGRA CRÍTICA PARA A JUSTIFICATIVA: 
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
+            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
 
             Estrutura EXATA exigida:
             {{
             "query": "string de busca final formatada em uma única linha",
-            "justification": "Breve explicação (em tópicos) das palavras principais e como a sintaxe específica da ACM (Title/Abstract/Keyword) foi aplicada."
+            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
 
