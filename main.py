@@ -1,7 +1,6 @@
 import logging
+import sys
 
-# Deve ser configurado ANTES de importar qualquer módulo que use logging,
-# pois basicConfig é no-op se já existir um handler configurado.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -9,46 +8,50 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from modules import ai_gemini, ai_groq, extractor, processor, exporter
+from modules.pipeline import PipelineConfig, generate_queries, run_analysis
 
 if __name__ == "__main__":
 
-    THEME    = "Post-Quantum Cryptography"
-    DATABASE = "Scopus"  # Opções: "Scopus", "IEEE", "ACM"
+    config = PipelineConfig(
+        theme       = "Post-Quantum Cryptography",
+        ai_provider = "groq",     # Opções: "gemini", "groq"
+    )
 
-    # Escolha o provedor de IA para todo o pipeline: "gemini" ou "groq"
-    AI_PROVIDER = "groq"
+    # ── Passo 1: gera queries para todas as bases ─────────────────────────
+    logger.info("Gerando queries — tema: '%s' | IA: %s", config.theme, config.ai_provider)
 
-    _ai = ai_gemini if AI_PROVIDER == "gemini" else ai_groq
+    try:
+        queries = generate_queries(config)
+    except (ValueError, EnvironmentError, RuntimeError) as e:
+        logger.error("Falha ao gerar queries: %s", e)
+        sys.exit(1)
 
-    logger.info("Iniciando Pipeline ETL — tema: '%s' | base: %s | IA: %s", THEME, DATABASE, AI_PROVIDER)
+    print("\n" + "═" * 60)
+    for db, (query, justification) in sorted(queries.queries.items()):
+        print(f"\n📋 [{db}]\n{query}\n")
+        print(f"   Justificativa: {justification}\n")
+    print("═" * 60)
 
-    # 1. IA gera a query
-    # Para economizar cota da API em testes, substitua por strings fixas:
-    #   query, justification = "sua query aqui", "sua justificativa aqui"
-    query, justification = _ai.generate_query_and_justification(THEME, DATABASE)
+    # ── Passo 2: aguarda o usuário colocar os .bib em data/ ───────────────
+    input("\nUse as queries acima nas bases de dados, exporte os resultados\n"
+          "como .bib e coloque-os na pasta data/.\n\n"
+          "Pressione ENTER para iniciar a análise...")
 
-    if not query:
-        logger.error("Falha ao gerar a query. Verifique a chave de API no .env.")
-        raise SystemExit(1)
+    # ── Passo 3: executa a análise sobre os .bib ──────────────────────────
+    logger.info("Iniciando análise dos arquivos .bib...")
 
-    # 2. Extract
-    raw_df = extractor.extract_bib_files("data")
-
-    if raw_df.empty:
-        logger.error("Nenhum artigo extraído. Verifique os arquivos .bib na pasta data/.")
-        raise SystemExit(1)
-
-    # 3. Transform
-    clean_df = processor.clean_and_deduplicate(raw_df)
-
-    # 4. Enrich (pode demorar — delay por artigo na chamada à IA)
-    enriched_df = processor.fetch_citations(clean_df)
-    final_df    = _ai.analyze_abstracts(enriched_df)
-
-    # 5. Load / Export
-    exporter.export_to_excel(final_df, "output/planilha.xlsx")
-    exporter.generate_pdf_report(THEME, query, justification, final_df, "output/relatorio.pdf")
-    exporter.create_final_zip("data", "output", "Entrega_Final.zip")
-
-    logger.info("Pipeline concluido! 'Entrega_Final.zip' disponivel em output/.")
+    try:
+        result = run_analysis(config, queries)
+        logger.info(
+            "Análise concluída! %d artigos em '%s'.",
+            len(result.final_df), result.zip_path,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        logger.error("Regra de negócio violada: %s", e)
+        sys.exit(1)
+    except EnvironmentError as e:
+        logger.error("Configuração de ambiente: %s", e)
+        sys.exit(1)
+    except RuntimeError as e:
+        logger.error("Falha na análise: %s", e)
+        sys.exit(1)

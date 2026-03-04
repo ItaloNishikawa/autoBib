@@ -32,7 +32,7 @@ _COLUMN_MAP: dict[str, str] = {
     "abstract"        : "Resumo",
     "citations"       : "Citações (Semantic Scholar)",
     "citations_scopus": "Citações (Scopus)",
-    "observations"    : "Observações (IA)",
+    "observations"    : "Observações",
 }
 
 
@@ -139,7 +139,7 @@ def generate_comparative_analysis(df: pd.DataFrame) -> str:
         f"(ano mais frequente: {ano_mais_frequente}).\n\n"
         f"4. Artigos indexados em mais de uma base: {n_multi} "
         f"(identificados via DOI e mesclados na coluna 'Indexadores').\n\n"
-        f"5. Avaliacao qualitativa: consulte a coluna 'Observacoes (IA)' "
+        f"5. Avaliacao qualitativa: consulte a coluna 'Observacoes' "
         f"na planilha para a analise critica de cada artigo.\n"
     )
     return analise
