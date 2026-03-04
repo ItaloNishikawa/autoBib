@@ -227,14 +227,16 @@ def generate_query_and_justification(theme: str, database: str) -> tuple[str, st
     return None, None
 
 
-def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
+def analyze_abstracts(df: pd.DataFrame, on_step=None) -> pd.DataFrame:
     """Envia os abstracts para a IA gerar a análise crítica estruturada.
 
     Para cada artigo com abstract válido, consulta o Gemini e armazena
     o resultado formatado em 5 tópicos na coluna ``observations``.
 
     Args:
-        df: DataFrame (preferencialmente já deduplicado e enriquecido).
+        df:      DataFrame (preferencialmente já deduplicado e enriquecido).
+        on_step: Callback opcional ``(mensagem, percentual)`` para progresso na UI.
+                 Percentual -1 = aviso, -2 = info de espera por cota.
 
     Returns:
         DataFrame com a coluna ``observations`` adicionada.
@@ -247,9 +249,10 @@ def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
     df["observations"] = None
 
     client = _get_client()
-    total = df["abstract"].notna().sum()
+    total = int(df["abstract"].notna().sum())
     logger.info("Iniciando leitura crítica com IA para %d artigos...", total)
 
+    done = 0
     for idx, row in df.iterrows():
         abstract = row.get("abstract", "")
         title    = row.get("title", "Artigo sem título")
@@ -258,7 +261,13 @@ def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
             df.at[idx, "observations"] = "Resumo ausente ou muito curto para análise."
             continue
 
-        logger.info("Analisando: '%s'...", str(title)[:60])
+        done += 1
+        pct_start = int((done - 1) / max(total, 1) * 100)
+        short_title = str(title)[:60]
+
+        logger.info("Analisando: '%s'...", short_title)
+        if on_step:
+            on_step(f"🔍 ({done}/{total}) Analisando: '{short_title}'...", pct_start)
 
         prompt = f"""
         Leia o abstract deste artigo científico.
@@ -281,12 +290,23 @@ def analyze_abstracts(df: pd.DataFrame) -> pd.DataFrame:
             text    = _generate_with_fallback(client, prompt)
             ai_data = _parse_json_response(text)
             df.at[idx, "observations"] = ai_data.get("observations", "Erro na formatação da resposta.")
+            pct_done = int(done / max(total, 1) * 100)
+            if on_step:
+                on_step(f"✅ ({done}/{total}) Concluído: '{short_title}'", pct_done)
         except Exception as exc:
             logger.warning("Erro ao analisar abstract (índice %d): %s", idx, exc)
             df.at[idx, "observations"] = "Erro na análise da IA."
+            if on_step:
+                on_step(
+                    f"⚠️ ({done}/{total}) Erro ao analisar '{str(title)[:40]}': {type(exc).__name__}",
+                    -1,
+                )
 
         # Delay obrigatório para não estourar a cota gratuita da API
-        time.sleep(4)
+        if done < total:
+            if on_step:
+                on_step(f"⏳ Aguardando 4s antes da próxima requisição...", -2)
+            time.sleep(4)
 
     logger.info("Leitura crítica finalizada.")
     return df

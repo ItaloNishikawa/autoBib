@@ -2,6 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Pandas](https://img.shields.io/badge/Pandas-Data%20Processing-150458.svg)
+![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)
 ![Gemini](https://img.shields.io/badge/AI-Google%20Gemini-orange.svg)
 ![Groq](https://img.shields.io/badge/AI-Groq-darkred.svg)
 
@@ -15,10 +16,12 @@ O projeto aplica conceitos de **Engenharia de Dados (ETL)** para transformar arq
 
 | Etapa | Descrição |
 |---|---|
-| **Extração (Extract)** | Leitura automatizada de múltiplos arquivos BibTeX (`.bib`), padronizando metadados (Título, Autores, Ano, DOI, etc.). |
+| **Interface Gráfica** | UI interativa em Streamlit com fluxo guiado em 3 etapas: geração de queries → upload dos `.bib` → resultados. |
+| **Geração de Queries** | IA gera automaticamente uma string de busca otimizada para cada base (Scopus, IEEE, ACM), com justificativa técnica. |
+| **Extração (Extract)** | Upload direto de arquivos `.bib` pela interface; parsing e padronização de metadados (Título, Autores, Ano, DOI, etc.). |
 | **Transformação (Transform)** | Limpeza de strings e deduplicação inteligente baseada no DOI, mesclando a origem dos indexadores. |
-| **Enriquecimento (Enrich)** | Consumo da API do **Semantic Scholar** para citações em tempo real + integração com **Google Gemini** para análise crítica dos *abstracts* (Contribuição, Metodologia, Limitações). |
-| **Carga (Load)** | Exportação para planilha Excel (`.xlsx`) formatada e geração de relatório estatístico em PDF. |
+| **Enriquecimento (Enrich)** | Consumo da API do **Semantic Scholar** para citações em tempo real + análise crítica dos *abstracts* por IA (Contribuição, Metodologia, Limitações), com feedback artigo a artigo. |
+| **Carga (Load)** | Exportação para planilha Excel (`.xlsx`), relatório PDF com as queries selecionadas e pacote ZIP final. |
 
 ---
 
@@ -28,12 +31,15 @@ A arquitetura foi desenhada com forte separação de responsabilidades *(Separat
 
 ```text
 📁 autoBib/
-├── 📁 data/                # Diretório de entrada (arquivos .bib originais)
-├── 📁 output/              # Diretório de saída (planilha e PDF gerados)
+├── 📁 data/                # Diretório de entrada (arquivos .bib — uso via CLI)
+├── 📁 output/              # Diretório de saída (planilha, PDF e ZIP gerados)
 ├── 📄 .env                 # Variáveis de ambiente (chaves de API)
-├── 📄 main.py              # Orquestrador principal do pipeline
+├── 📄 app.py               # Interface gráfica (Streamlit) — ponto de entrada UI
+├── 📄 main.py              # Ponto de entrada CLI (terminal)
 └── 📁 modules/             # Módulos do sistema
     ├── 📄 __init__.py
+    ├── 📄 pipeline.py      # Orquestrador ETL (generate_queries + run_analysis)
+    ├── 📄 rules.py         # Regras de negócio e validações centralizadas
     ├── 📄 extractor.py     # Ingestão e parsing de arquivos BibTeX
     ├── 📄 processor.py     # Limpeza, deduplicação e requisições HTTP
     ├── 📄 ai_gemini.py     # Comunicação com a IA (Google Gemini)
@@ -78,15 +84,29 @@ GEMINI_API_KEY=sua_chave_gemini_aqui
 GROQ_API_KEY=sua_chave_groq_aqui
 ```
 
-Coloque os arquivos exportados das bases de dados (ex: `scopus.bib`, `ieee.bib`, `acm.bib`) dentro da pasta `data/`.
-
 ### 4. Execução
+
+#### Interface Gráfica (recomendado)
+
+```bash
+streamlit run app.py
+```
+
+Acesse `http://localhost:8501` no navegador. O fluxo é guiado em **3 etapas**:
+
+| Etapa | O que acontece |
+|---|---|
+| **1️⃣ Gerar Queries** | Informe o tema e o provedor de IA. A ferramenta gera uma query otimizada para cada base (Scopus, IEEE, ACM). |
+| **2️⃣ Enviar Arquivos** | Use as queries nas bases, exporte os resultados como `.bib` e faça upload direto pela interface. Escolha o provedor de IA para análise e quais queries incluir no PDF. |
+| **3️⃣ Resultados** | Visualize os artigos processados e baixe a planilha Excel, o relatório PDF e o pacote ZIP. |
+
+#### Terminal (CLI)
 
 ```bash
 python main.py
 ```
 
-Os resultados (planilha Excel e relatório PDF) serão gerados automaticamente na pasta `output/`.
+Coloque os arquivos `.bib` exportados na pasta `data/` antes de pressionar ENTER. Os resultados serão gerados em `output/`.
 
 ---
 
@@ -94,6 +114,7 @@ Os resultados (planilha Excel e relatório PDF) serão gerados automaticamente n
 
 | Biblioteca | Uso |
 |---|---|
+| **Streamlit** | Interface gráfica web com fluxo de 3 etapas e feedback em tempo real |
 | **Pandas** | Manipulação e análise de dados em memória |
 | **NumPy** | Suporte a operações numéricas e vetoriais |
 | **BibtexParser** | Interpretação da sintaxe de arquivos `.bib` |

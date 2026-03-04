@@ -156,7 +156,17 @@ def run_analysis(
 
     _notify("🧠 Analisando abstracts com IA (pode demorar)...", 65)
     PipelineRules.warn_low_abstract_coverage(enriched_df, on_step)
-    result.final_df = _ai.analyze_abstracts(enriched_df)
+
+    # Encapsula o callback para mapear 0-100 (interno ao analyze_abstracts)
+    # para a faixa 65-90 usada pelo pipeline geral.
+    def _abstract_step(msg: str, pct: int) -> None:
+        if pct < 0:
+            # Avisos e mensagens de espera passam direto (pct -1 ou -2)
+            _notify(msg, pct)
+        else:
+            _notify(msg, int(65 + pct * 0.25))
+
+    result.final_df = _ai.analyze_abstracts(enriched_df, _abstract_step)
 
     # ── Etapa 4 — Exportação ──────────────────────────────────────────────
     _notify("💾 Exportando planilha Excel e relatório PDF...", 90)

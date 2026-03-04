@@ -218,12 +218,17 @@ elif st.session_state.step == "queries":
         st.subheader("📊 Progresso da análise")
         status      = st.empty()
         bar         = st.progress(0)
-        warning_box = st.empty()
+        notice_box  = st.empty()   # avisos de cota / erros por artigo
 
         def _on_analysis_step(msg: str, pct: int) -> None:
             if pct == -1:
-                warning_box.warning(msg)
+                # Erro por artigo — aviso amarelo
+                notice_box.warning(msg)
+            elif pct == -2:
+                # Espera por limite de cota — informativo azul
+                notice_box.info(msg)
             else:
+                notice_box.empty()   # limpa aviso anterior ao avançar
                 status.info(msg)
                 bar.progress(pct)
 
