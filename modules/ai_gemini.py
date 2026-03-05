@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -35,7 +36,10 @@ _MODELS: list[str] = [
 
 def _get_client() -> genai.Client:
     """Retorna o cliente Gemini, inicializando-o na primeira chamada."""
-    load_dotenv()
+    # Carrega .env do diretório raiz do projeto, não do cwd atual
+    # override=True garante que o .env sobrescreve variáveis já definidas no ambiente
+    env_path = Path(__file__).parent.parent / ".env"
+    load_dotenv(dotenv_path=env_path, override=True)
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise EnvironmentError(

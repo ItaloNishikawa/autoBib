@@ -11,6 +11,7 @@ Prompts e parser JSON são compartilhados com ai_gemini para evitar duplicação
 import logging
 import os
 import time
+from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -37,8 +38,15 @@ _GROQ_MODELS: list[str] = [
 
 def _get_client() -> Groq:
     """Retorna o cliente Groq, inicializando-o na primeira chamada."""
-    load_dotenv()
+    # Carrega .env do diretório raiz do projeto, não do cwd atual
+    # override=True garante que o .env sobrescreve variáveis já definidas no ambiente
+    env_path = Path(__file__).parent.parent / ".env"
+    load_dotenv(dotenv_path=env_path, override=True)
     api_key = os.getenv("GROQ_API_KEY")
+    print(f"[DEBUG] .env path: {env_path}")
+    print(f"[DEBUG] .env exists: {env_path.exists()}")
+    print(f"[DEBUG] GROQ_API_KEY carregada: {bool(api_key)}")  # DEBUG
+    logger.debug(f"GROQ_API_KEY carregada: {bool(api_key)}")
     if not api_key:
         raise EnvironmentError(
             "GROQ_API_KEY não encontrada. Defina a variável no arquivo .env."
