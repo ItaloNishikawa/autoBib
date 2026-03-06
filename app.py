@@ -21,7 +21,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from modules.pipeline import PipelineConfig, QueriesResult, generate_queries, run_analysis
+from modules.pipeline import PipelineConfig, QueriesResult, generate_queries, regenerate_query, run_analysis
 from modules.rules import PipelineRules
 
 logging.basicConfig(
@@ -155,6 +155,18 @@ elif st.session_state.step == "queries":
             st.code(query, language="text")
             if justification:
                 st.caption(f"**Justificativa:** {justification}")
+            if st.button(f"🔄 Refazer query", key=f"regen_{db}"):
+                with st.spinner(f"Regenerando query para {db}..."):
+                    try:
+                        new_query, new_just = regenerate_query(config, db)
+                        st.session_state.queries_result.queries[db] = (new_query, new_just)
+                        st.rerun()
+                    except EnvironmentError as e:
+                        st.error(f"🔑 Chave de API ausente: {e}")
+                    except RuntimeError as e:
+                        st.error(f"💥 {e}")
+                    except Exception as e:
+                        st.error(f"💥 Erro inesperado: {type(e).__name__}: {e}")
 
     st.divider()
     st.subheader("📂 Upload dos arquivos .bib")

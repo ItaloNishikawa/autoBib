@@ -108,6 +108,33 @@ def generate_queries(
     return result
 
 
+def regenerate_query(
+    config: PipelineConfig,
+    database: str,
+) -> tuple[str, str]:
+    """Regenera a query para uma única base de dados.
+
+    Args:
+        config:   Configuração com tema e provedor de IA.
+        database: Base de dados alvo (ex: ``"Scopus"``).
+
+    Returns:
+        Tupla ``(query, justification)`` gerada pela IA.
+
+    Raises:
+        RuntimeError:     IA não retornou uma query válida.
+        EnvironmentError: Chave de API ausente no .env.
+    """
+    _ai = ai_gemini if config.ai_provider == "gemini" else ai_groq
+    query, justification = _ai.generate_query_and_justification(config.theme, database)
+    if not query:
+        raise RuntimeError(
+            f"A IA não retornou uma query válida para '{database}'. "
+            "Verifique a chave de API no .env e tente novamente."
+        )
+    return query, justification
+
+
 # ---------------------------------------------------------------------------
 # Etapa 2 — Análise dos arquivos .bib
 # ---------------------------------------------------------------------------

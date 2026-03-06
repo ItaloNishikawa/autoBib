@@ -111,24 +111,26 @@ def _build_prompt(theme: str, database: str) -> str:
             Sua tarefa é criar uma query de busca OTIMIZADA para a base de dados IEEE Xplore (Command Search) sobre o seguinte tema de pesquisa: "{theme}".
 
             REGRAS ESTRITAS PARA A QUERY NO IEEE XPLORE:
-            1. Delimitadores de Campo: Use a sintaxe específica do IEEE especificando os campos de metadados. Englobe os blocos de busca usando "Document Title": e "Abstract":. Exemplo: ("Document Title": termo OR "Abstract": termo).
-            2. Agrupamento: Agrupe sinônimos usando a cláusula OR dentro de parênteses. Use aspas duplas ("") estritamente para termos compostos exatos. O limite máximo de aninhamento são 3 níveis de parênteses.
-            3. Truncamento Limitado (Regra Crítica): O motor do IEEE falha com excesso de wildcards. Use o asterisco (*) APENAS para plurais indispensáveis. Limite rigorosamente a no máximo 4 asteriscos (*) em toda a query.
-            4. Controle de Siglas: Se o tema gerar siglas de 3 ou 4 letras, force um contexto para evitar falsos positivos. Exemplo: ("Sigla" AND "palavra de contexto").
-            5. Exclusão Simples: Crie um bloco AND NOT no final para excluir termos indesejados, mas mantenha-o linear e sem parênteses complexos internos.
+            1. SINTAXE DE CAMPOS (ALERTA CRÍTICO DE FALHA): O motor do IEEE NÃO interpreta corretamente múltiplos termos agrupados dentro de uma única declaração de campo. 
+               -> PROIBIDO: "Document Title":("termo A" OR "termo B")
+               -> OBRIGATÓRIO: Repita a tag de campo para CADA termo individualmente. Crie blocos combinando Título e Resumo para cada sinônimo. Exemplo exato: (("Document Title":"termo A" OR "Abstract":"termo A") OR ("Document Title":"termo B" OR "Abstract":"termo B")).
+            2. LIMITE MÁXIMO DE TERMOS: O motor do IEEE aceita NO MÁXIMO 40 termos lógicos. Como a Regra 1 exige a repetição de campos, você DEVE ser extremamente seletivo. Escolha no máximo 4 a 5 sinônimos principais por conceito.
+            3. LIMITAÇÃO DE CURINGAS: O motor sofre crash com excesso de wildcards. É ESTRITAMENTE PROIBIDO usar mais de 4 asteriscos (*) em toda a string. Prefira escrever variações gramaticais por extenso.
+            4. Aninhamento Simples: NUNCA abra mais de 3 níveis de parênteses consecutivos (Ex: "((("). Mantenha a lógica de agrupamento o mais plana possível para evitar erro de timeout na base.
+            5. Exclusão Simples: Crie um bloco AND NOT no final para excluir no máximo 3 termos indesejados. Exemplo: AND NOT ("termo ruim" OR "outro termo").
+            6. Operadores e Campos Obrigatórios: Todos os operadores booleanos/de proximidade DEVEM estar em MAIÚSCULAS (AND, OR, NOT, NEAR, ONEAR). Há um máximo de 25 termos de busca por cláusula de busca. O nome do campo de dados DEVE ser declarado antes de cada termo de busca individual, conforme exigido pela sintaxe do IEEE Command Search.
 
             DIRETRIZES DE SAÍDA (FORMATO):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
-            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
+            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown.
             As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
             
             REGRA CRÍTICA PARA A JUSTIFICATIVA: 
-            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
-            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos. Use explicitamente '\\n' para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
 
             Estrutura EXATA exigida:
             {{
-            "query": "string de busca final formatada em uma única linha",
+            "query": "string de busca final formatada em uma única linha, seguindo a Regra 1 rigorosamente",
             "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
@@ -139,21 +141,23 @@ def _build_prompt(theme: str, database: str) -> str:
 
             Sua tarefa é criar uma query de busca OTIMIZADA para o Scopus sobre o seguinte tema de pesquisa: "{theme}".
 
-            REGRAS ESTRITAS PARA A QUERY:
-            1. Delimitadores: Use obrigatoriamente a sintaxe TITLE-ABS-KEY( ) para restringir a busca a Títulos, Resumos e Palavras-chave.
-            2. Agrupamento: Agrupe sinônimos usando a cláusula OR dentro de parênteses. Use aspas duplas ("") estritamente para termos compostos exatos.
-            3. Truncamento: Use o asterisco (*) para capturar plural e variações de sufixos (ex: algorithm*).
-            4. Controle de Siglas (Crucial): Se o tema gerar siglas de 3 ou 4 letras, force um contexto para evitar falsos positivos. Exemplo: ( "Sigla" AND palavra_de_contexto* ).
-            5. Exclusão: Crie um bloco genérico AND NOT no final para excluir áreas do conhecimento ou termos homônimos não relacionados ao escopo provável do tema.
+            REGRAS ESTRITAS PARA A QUERY NO SCOPUS:
+            1. Delimitadores: Use obrigatoriamente a sintaxe TITLE-ABS-KEY() no início do bloco de inclusão e TITLE-ABS-KEY() no bloco de exclusão.
+            2. Regra das Aspas (ALERTA CRÍTICO): No Scopus, o espaço atua como operador AND. Portanto, QUALQUER termo composto por duas ou mais palavras DEVE OBRIGATORIAMENTE estar entre aspas duplas, MESMO que contenha um asterisco no final. 
+               -> ERRADO: key exchange*
+               -> CORRETO: "key exchange*"
+            3. Balanceamento de Parênteses (ALERTA CRÍTICO): Evite erros de sintaxe mantendo a estrutura plana. NUNCA aninhe mais de 2 níveis de parênteses. A string inteira deve ser essencialmente: TITLE-ABS-KEY((grupo 1) OR (grupo 2)) AND NOT TITLE-ABS-KEY((exclusões)). Certifique-se matematicamente de que cada parêntese aberto seja fechado.
+            4. Truncamento: Use o asterisco (*) para capturar plural e variações de sufixos (ex: "algorithm*").
+            5. Controle de Siglas: Se o tema gerar siglas de 3 ou 4 letras, force um contexto para evitar falsos positivos. Exemplo: ("Sigla" AND "palavra de contexto*").
+            6. Exclusão: Crie um bloco genérico AND NOT TITLE-ABS-KEY(...) no final para excluir áreas não relacionadas.
 
             DIRETRIZES DE SAÍDA (FORMATO):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
-            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
+            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown.
             As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
             
             REGRA CRÍTICA PARA A JUSTIFICATIVA: 
-            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
-            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos. Use explicitamente '\\n' para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
 
             Estrutura EXATA exigida:
             {{
