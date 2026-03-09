@@ -106,21 +106,21 @@ def _build_prompt(theme: str, database: str) -> str:
 
     if base == "IEEE":
         return f"""
-            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas de alta precisão.
+            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas, CONCISAS e de altíssima precisão.
 
-            Sua tarefa é criar uma query de busca OTIMIZADA para a base de dados IEEE Xplore (Command Search) sobre o seguinte tema de pesquisa: "{theme}".
+            Sua tarefa é extrair os conceitos centrais do tema "{theme}" e criar uma query de busca OTIMIZADA para a base IEEE Xplore (Command Search).
 
             REGRAS ESTRITAS PARA A QUERY NO IEEE XPLORE:
-            1. SINTAXE DE CAMPOS (ALERTA CRÍTICO DE FALHA): O motor do IEEE NÃO interpreta corretamente múltiplos termos agrupados dentro de uma única declaração de campo. 
-               -> PROIBIDO: "Document Title":("termo A" OR "termo B")
-               -> OBRIGATÓRIO: Repita a tag de campo para CADA termo individualmente. Crie blocos combinando Título e Resumo para cada sinônimo. Exemplo exato: (("Document Title":"termo A" OR "Abstract":"termo A") OR ("Document Title":"termo B" OR "Abstract":"termo B")).
-            2. LIMITE MÁXIMO DE TERMOS: O motor do IEEE aceita NO MÁXIMO 40 termos lógicos. Como a Regra 1 exige a repetição de campos, você DEVE ser extremamente seletivo. Escolha no máximo 4 a 5 sinônimos principais por conceito.
-            3. LIMITAÇÃO DE CURINGAS: O motor sofre crash com excesso de wildcards. É ESTRITAMENTE PROIBIDO usar mais de 4 asteriscos (*) em toda a string. Prefira escrever variações gramaticais por extenso.
-            4. Aninhamento Simples: NUNCA abra mais de 3 níveis de parênteses consecutivos (Ex: "((("). Mantenha a lógica de agrupamento o mais plana possível para evitar erro de timeout na base.
-            5. Exclusão Simples: Crie um bloco AND NOT no final para excluir no máximo 3 termos indesejados. Exemplo: AND NOT ("termo ruim" OR "outro termo").
-            6. Operadores e Campos Obrigatórios: Todos os operadores booleanos/de proximidade DEVEM estar em MAIÚSCULAS (AND, OR, NOT, NEAR, ONEAR). Há um máximo de 25 termos de busca por cláusula de busca. O nome do campo de dados DEVE ser declarado antes de cada termo de busca individual, conforme exigido pela sintaxe do IEEE Command Search.
+            1. Máxima Relevância (TÍTULO E RESUMO): Para evitar artigos genéricos ou de baixa relevância, o conceito principal DEVE ser buscado obrigatoriamente no título do documento usando a tag "Document Title". Os conceitos secundários e de contexto devem ser buscados no resumo usando a tag "Abstract".
+            2. Sintaxe de Campos Obrigatória (ALERTA CRÍTICO): O motor do IEEE NÃO interpreta múltiplos termos agrupados em uma única declaração de campo. Você DEVE repetir a tag para CADA termo individualmente.
+               -> PROIBIDO: "Abstract":("termo A" OR "termo B")
+               -> OBRIGATÓRIO: ("Abstract":"termo A" OR "Abstract":"termo B")
+            3. Controle de Tamanho e Operadores: Extraia 1 conceito principal e no máximo 2 conceitos secundários (com até 1 sinônimo cada). A query DEVE conter os operadores AND, OR e NOT.
+            4. Limitação de Curingas: Use no MÁXIMO 2 asteriscos (*) em toda a string. O motor do IEEE falha com excesso de wildcards. Prefira escrever variações essenciais por extenso se necessário.
+            5. Estrutura Exigida: A sua query DEVE seguir exatamente este esqueleto lógico, respeitando o limite de parênteses:
+               ("Document Title":"conceito principal exato") AND (""Document Title":"conceito principal exato" OR "Abstract":"conceito secundário" OR "Abstract":"sinônimo do secundário") AND NOT ("Document Title":"termo irrelevante" OR "Abstract":"termo irrelevante")
 
-            DIRETRIZES DE SAÍDA (FORMATO):
+            DIRETRIZES DE SAÍDA (FORMATO JSON):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
             NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown.
             As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
@@ -130,28 +130,57 @@ def _build_prompt(theme: str, database: str) -> str:
 
             Estrutura EXATA exigida:
             {{
-            "query": "string de busca final formatada em uma única linha, seguindo a Regra 1 rigorosamente",
-            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
+            "query": "string de busca final formatada em uma única linha, seguindo o esqueleto lógico e a repetição de tags",
+            "justification": "- Palavras-chave: [Conceito principal focado no Document Title]\\n- Sinônimos e Contexto: [Quais sinônimos usou no Abstract e como agrupou]\\n- Sintaxe da Base: [Uso repetido das tags de campo e limite de wildcards]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
 
     if base == "SCOPUS":
         return f"""
-            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas de alta precisão.
+            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas, CONCISAS e de altíssima precisão.
 
-            Sua tarefa é criar uma query de busca OTIMIZADA para o Scopus sobre o seguinte tema de pesquisa: "{theme}".
+            Sua tarefa é extrair os conceitos centrais do tema "{theme}" e criar uma query de busca OTIMIZADA para o Scopus.
 
             REGRAS ESTRITAS PARA A QUERY NO SCOPUS:
-            1. Delimitadores: Use obrigatoriamente a sintaxe TITLE-ABS-KEY() no início do bloco de inclusão e TITLE-ABS-KEY() no bloco de exclusão.
-            2. Regra das Aspas (ALERTA CRÍTICO): No Scopus, o espaço atua como operador AND. Portanto, QUALQUER termo composto por duas ou mais palavras DEVE OBRIGATORIAMENTE estar entre aspas duplas, MESMO que contenha um asterisco no final. 
-               -> ERRADO: key exchange*
-               -> CORRETO: "key exchange*"
-            3. Balanceamento de Parênteses (ALERTA CRÍTICO): Evite erros de sintaxe mantendo a estrutura plana. NUNCA aninhe mais de 2 níveis de parênteses. A string inteira deve ser essencialmente: TITLE-ABS-KEY((grupo 1) OR (grupo 2)) AND NOT TITLE-ABS-KEY((exclusões)). Certifique-se matematicamente de que cada parêntese aberto seja fechado.
-            4. Truncamento: Use o asterisco (*) para capturar plural e variações de sufixos (ex: "algorithm*").
-            5. Controle de Siglas: Se o tema gerar siglas de 3 ou 4 letras, force um contexto para evitar falsos positivos. Exemplo: ("Sigla" AND "palavra de contexto*").
-            6. Exclusão: Crie um bloco genérico AND NOT TITLE-ABS-KEY(...) no final para excluir áreas não relacionadas.
+            1. Precisão com ABS() (OBRIGATÓRIO): Para garantir que a busca seja estritamente sobre o tema e não genérica, o conceito principal DEVE ser buscado especificamente no resumo usando ABS(). 
+            2. Operadores Obrigatórios: A sua query final DEVE obrigatoriamente conter pelo menos um operador AND, um OR e um AND NOT.
+            3. Limite de Sinônimos (CONTROLE DE TAMANHO): Extraia no máximo 2 conceitos secundários do tema. Para cada conceito secundário, forneça NO MÍNIMO 1 e NO MÁXIMO 2 sinônimos diretos usando o operador OR. Não invente termos periféricos.
+            4. Regra das Aspas (ALERTA CRÍTICO): QUALQUER termo composto por duas ou mais palavras DEVE OBRIGATORIAMENTE estar entre aspas duplas, mesmo com asterisco (ex: "machine learning*").
+            5. Estrutura Exigida: A sua query DEVE seguir exatamente este esqueleto lógico:
+               ABS("conceito principal exato") AND TITLE-ABS-KEY("conceito principal exato" OR "conceito secundário" OR "sinônimo do secundário") AND NOT TITLE-ABS-KEY("termo irrelevante 1" OR "termo irrelevante 2")
 
-            DIRETRIZES DE SAÍDA (FORMATO):
+            DIRETRIZES DE SAÍDA (FORMATO JSON):
+            Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
+            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown.
+            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
+            
+            A justificativa deve ser uma única string contendo exatamente 4 tópicos separados explicitamente por '\\n'.
+
+            Estrutura EXATA exigida:
+            {{
+            "query": "string de busca final formatada em uma única linha seguindo o esqueleto lógico",
+            "justification": "- Palavras-chave: [Conceito principal no ABS]\\n- Sinônimos e Contexto: [Quais sinônimos usou no OR]\\n- Sintaxe da Base: [Uso do ABS, AND, OR e aspas]\\n- Exclusões: [Quais termos removeu com AND NOT para evitar viés]"
+            }}
+        """
+
+    if base == "ACM":
+        return f"""
+            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas, CONCISAS e de altíssima precisão.
+
+            Sua tarefa é extrair os conceitos centrais do tema "{theme}" e criar uma query de busca OTIMIZADA para a base ACM Digital Library.
+
+            REGRAS ESTRITAS PARA A QUERY NA ACM:
+            1. Máxima Relevância (TÍTULO E RESUMO): Para evitar excesso de artigos irrelevantes, o conceito principal DEVE ser buscado OBRIGATORIAMENTE no campo Title. Os conceitos secundários devem ser buscados no campo Abstract. 
+               -> PROIBIDO buscar tudo em todos os campos simultaneamente.
+            2. Truncamento e Aspas (ALERTA CRÍTICO DE FALHA): A ACM gera erro fatal se houver asterisco (*) dentro de aspas duplas. 
+               -> PROIBIDO: "software architecture*"
+               -> PERMITIDO: "software architecture" OR architect*
+            3. Limite de Conceitos: Extraia 1 conceito principal (para o título) e no máximo 2 conceitos secundários (com até 1 sinônimo cada, para o resumo).
+            4. Operadores Booleanos: Todos os operadores DEVEM estar em MAIÚSCULAS (AND, OR, NOT). Na ACM, use apenas NOT (e não AND NOT) para exclusões.
+            5. Estrutura Exigida: A sua query DEVE seguir exatamente este esqueleto lógico, respeitando a sintaxe da base:
+               Title:("conceito principal exato") AND Abstract:("conceito principal exato" OR "conceito secundário" OR "sinônimo do secundário") NOT Title:("termo irrelevante 1" OR "termo irrelevante 2")
+
+            DIRETRIZES DE SAÍDA (FORMATO JSON):
             Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
             NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown.
             As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
@@ -161,37 +190,8 @@ def _build_prompt(theme: str, database: str) -> str:
 
             Estrutura EXATA exigida:
             {{
-            "query": "string de busca final formatada em uma única linha",
-            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
-            }}
-        """
-
-    if base == "ACM":
-        return f"""
-            Você é um especialista em bibliometria e ciência da informação, focado em criar strings de busca avançadas de alta precisão.
-
-            Sua tarefa é criar uma query de busca OTIMIZADA para a base de dados ACM Digital Library sobre o seguinte tema de pesquisa: "{theme}".
-
-            REGRAS ESTRITAS PARA A QUERY NA ACM:
-            1. Delimitadores de Campo: A ACM exige a declaração explícita dos campos. Para buscar de forma abrangente, aplique os blocos de conceitos aos campos Title, Abstract e Keyword. A estrutura deve ser: (Title:("termo1" OR termo2) OR Abstract:("termo1" OR termo2) OR Keyword:("termo1" OR termo2)).
-            2. Operadores Booleanos: Todos os operadores (AND, OR, NOT) devem estar OBRIGATORIAMENTE em LETRAS MAIÚSCULAS. A ACM falha ou ignora booleanos em minúsculas.
-            3. Agrupamento e Aspas: Use aspas duplas ("") estritamente para termos compostos (ex: "software architecture"). Agrupe a lógica sempre com parênteses.
-            4. Truncamento (Regra Crítica): Use o asterisco (*) para variações de palavras, mas NUNCA coloque um asterisco dentro de aspas duplas (ex: "quantum comput*" causará erro na ACM). O asterisco só funciona em palavras simples soltas.
-            5. Controle de Siglas e Exclusão: Pareie siglas curtas com palavras de contexto usando AND. Para exclusões, use NOT no final da query para remover termos fora do escopo.
-
-            DIRETRIZES DE SAÍDA (FORMATO):
-            Retorne ÚNICA e EXCLUSIVAMENTE um objeto JSON válido.
-            NÃO inclua saudações, explicações fora do JSON ou blocos de formatação markdown (como ```json).
-            As aspas duplas dentro dos valores do JSON devem ser corretamente escapadas (\\").
-            
-            REGRA CRÍTICA PARA A JUSTIFICATIVA: 
-            A justificativa deve ser uma única string contendo exatamente 4 tópicos. 
-            Use explicitamente os caracteres '\\n' (barra invertida e a letra n) para criar as quebras de linha dentro do JSON. Não use quebras de linha reais.
-
-            Estrutura EXATA exigida:
-            {{
-            "query": "string de busca final formatada em uma única linha",
-            "justification": "- Palavras-chave: [Liste as principais]\\n- Sinônimos e Contexto: [Como agrupou e evitou falsos positivos]\\n- Sintaxe da Base: [Como aplicou as regras específicas desta base (ex: wildcards, campos)]\\n- Exclusões: [Quais termos removeu com NOT]"
+            "query": "string de busca final formatada em uma única linha, seguindo rigorosamente o esqueleto lógico da Regra 5",
+            "justification": "- Palavras-chave: [Conceito principal focado no Title]\\n- Sinônimos e Contexto: [Como agrupou no Abstract e lidou com a regra do curinga]\\n- Sintaxe da Base: [Declaração explícita de campos e uso correto das aspas sem asterisco]\\n- Exclusões: [Quais termos removeu com NOT]"
             }}
         """
 
